@@ -1,12 +1,38 @@
+import csv
 import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 import requests
 
-URL = "https://labase.quebecsolidaire.net/api/v2/instances/32/contacts"
+PER_PAGE = 100
+DISTRICT_ID = "32"  # Jean-Talon
+
+URL = f"https://labase.quebecsolidaire.net/api/v2/instances/{DISTRICT_ID}/contacts"
+FIELDS = [
+    "address",
+    "adopted_instances.name",
+    "apartment",
+    "birthdate",
+    "city",
+    "contribution_current_year",
+    "contribution_last_year",
+    "district.name",
+    "dpa",
+    "email",
+    "first_name",
+    "full_name",
+    "gender",
+    "home_phone",
+    "last_contact_exchange.called_at",
+    "last_contribution.date",
+    "last_name",
+    "postal_code",
+    "status",
+    "v1_contact_id",
+]
 
 
 def main() -> None:
@@ -31,8 +57,8 @@ def main() -> None:
         res = requests.get(
             URL,
             params={
-                "per_page": 20,
-                "fields": "address,adopted_instances.name,apartment,birthdate,city,contribution_current_year,contribution_last_year,district.name,dpa,email,first_name,full_name,gender,home_phone,last_contact_exchange.called_at,last_contribution.date,last_name,postal_code,status,v1_contact_id",
+                "per_page": PER_PAGE,
+                "fields": ",".join(FIELDS),
                 "order": "last_name,first_name,v1_contact_id",
                 "status": "MER",  # Membres en règle
                 "page": page,
@@ -51,12 +77,32 @@ def main() -> None:
     print(f"{len(all_contacts)} exportés")
     root_dir = Path("~").expanduser() / "QS"
     root_dir.mkdir(parents=True, exist_ok=True)
-    file_location = (
-        root_dir / f"contacts_export_{datetime.now().strftime('%Y_%m_%d')}.json"
-    )
+    file_name = f"contacts_export_{datetime.now().strftime('%Y_%m_%d')}"
+    file_location = root_dir / f"{file_name}.json"
     with file_location.open(mode="w", encoding="utf-8") as f_writer:
         json.dump(all_contacts, f_writer, indent=4, sort_keys=True)
     print(f"Export enregistré sous {file_location}")
+
+    csv_file_location = root_dir / f"{file_name}.csv"
+    with csv_file_location.open(mode="w", newline="", encoding="utf-8") as csv_file:
+        csv_writer = csv.writer(
+            csv_file, delimiter=";", quotechar="'", quoting=csv.QUOTE_MINIMAL
+        )
+        csv_writer.writerow(FIELDS)
+        for contact in all_contacts:
+            row_content: List[str] = []
+            for field_name in FIELDS:
+                if "." in field_name:
+                    field1, field2 = field_name.split(".")
+                    content = contact.get(field1, {})
+                    if content:
+                        content = content.get(field2, "")
+                else:
+                    content = str(contact.get(field_name, ""))
+                row_content.append(content)
+            row_content = [(r_c if r_c else "") for r_c in row_content]
+            csv_writer.writerow(row_content)
+    print(f"Export enregistré sous {csv_file_location}")
 
 
 if __name__ == "__main__":
